@@ -1,6 +1,5 @@
 require "bulk_importer/version"
-require "active_support"
-require "active_support/core_ext"
+require "active_support/all"
 require "bulk_importer/postgresql_module.rb"
 
 module BulkImporter
