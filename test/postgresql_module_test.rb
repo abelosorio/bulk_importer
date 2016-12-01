@@ -1,7 +1,7 @@
 require 'minitest/autorun'
 require 'bulk_importer/postgresql_module.rb'
 
-class PostgresqlModuleTest < MiniTest::Unit::TestCase
+class PostgresqlModuleTest < MiniTest::Test
   def test_copy_sentences
     # Copy from CSV file, setting columns, and delimiter as ;
     assert_equal(
