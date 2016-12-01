@@ -1,4 +1,5 @@
-# BulkImporter
+# BulkImporter [![Build Status](https://travis-ci.org/abelosorio/bulk_importer.svg?branch=master)](https://travis-ci.org/abelosorio/bulk_importer)
+
 
 This gem allows you to import a big amount of data from files to your database as quick as possible.
 
