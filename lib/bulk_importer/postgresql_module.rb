@@ -3,13 +3,13 @@
 # +see+ https://www.postgresql.org/docs/9.4/static/index.html
 #
 module PostgresqlModule
-  # Copy from file or standard input.
+  # Copy from file.
   #
   # +see+ https://www.postgresql.org/docs/9.4/static/sql-copy.html
   #
   # ==== Parameters
   #
-  # * +from+   path_to_some_file|stdin.
+  # * +from+   path_to_some_file.
   # * +target+ Destination table name.
   #
   # ==== Options
@@ -24,10 +24,63 @@ module PostgresqlModule
   # +integer+ Number of imported rows.
   #
   def self.copy_from(from, target, format: 'csv', delimiter: ',', null: '', header: true)
-    return -1 unless from == 'stdin' or from.is_a? File
+    return -1 unless from.is_a? File
 
-    result = ActiveRecord::Base.connection.execute self.make_import_sql(
-      from.is_a?(File) ? from.path : from,
+    if self.can_execute_copy
+      # Copy file directly.
+      result = ActiveRecord::Base.connection.execute self.make_import_sql(
+        from.path,
+        target,
+        format:    format,
+        delimiter: delimiter,
+        null:      null,
+        header:    header
+      )
+    else
+      # Copy file by sending it trough stdin.
+      result = self.copy_trough_stdin(
+        from.path,
+        target,
+        format:    format,
+        delimiter: delimiter,
+        null:      null,
+        header:    header
+      )
+    end
+
+    result.cmd_tuples
+  end
+
+  # Copy from file by sendind it trough stdin.
+  #
+  # You should not run this method directly, instead use copy_from.
+  #
+  # ==== Parameters
+  #
+  # * +from+   path_to_some_file.
+  # * +target+ Destination table name.
+  #
+  # ==== Options
+  #
+  # * +format+    File format. Defaults to 'csv'.
+  # * +delimiter+ Column separator character. Defaults ','.
+  # * +null+      String that represent null values. Defaults '' (empty).
+  # * +header+    File includes header? Defaults to True.
+  #
+  # ==== Return
+  #
+  # +integer+ Number of imported rows.
+  #
+  def self.copy_trough_stdin(from, target, format: 'csv', delimiter: ',', null: '', header: true)
+
+    # This solution was taken from:
+    # http://www.kadrmasconcepts.com/blog/2013/12/15/copy-millions-of-rows-to-postgresql-with-rails
+
+    conn = ActiveRecord::Base.connection
+    raw  = conn.raw_connection
+
+    raw.exec self.make_import_sql(
+      'stdin',
       target,
       format:    format,
       delimiter: delimiter,
@@ -35,7 +88,16 @@ module PostgresqlModule
       header:    header
     )
 
-    result.cmd_tuples
+    file = File.open from, 'r'
+
+    until file.eof?
+      raw.put_copy_data file.readline
+    end
+
+    raw.put_copy_end
+    file.close
+
+    raw.get_result
   end
 
   # Get column types.
@@ -133,5 +195,30 @@ module PostgresqlModule
         FROM information_schema.columns
         WHERE table_name = '#{table}'
     eof
+  end
+
+  # Checks if the current db user can execute COPY.
+  #
+  # ==== Return
+  #
+  # +bool+
+  #
+  def self.can_execute_copy()
+    # Only superusers can execute COPY.
+    query = <<-eof
+      SELECT *
+        FROM pg_roles
+        WHERE rolsuper AND
+              rolname = CURRENT_USER
+    eof
+
+    begin
+      ActiveRecord::Base.connection.execute(query).cmd_tuples > 0
+    rescue Exception => e
+      Rails.logger.error e.message
+      Rails.logger.error e.backtrace
+
+      false
+    end
   end
 end
