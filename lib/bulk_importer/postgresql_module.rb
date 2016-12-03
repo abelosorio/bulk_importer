@@ -205,20 +205,23 @@ module PostgresqlModule
   #
   def self.can_execute_copy()
     # Only superusers can execute COPY.
+    self.is_superuser
+  end
+
+  # Checks if the current user is SUPERUSER.
+  #
+  # ==== Return
+  #
+  # + bool+
+  #
+  def self.is_superuser
     query = <<-eof
-      SELECT *
+      SELECT rolsuper
         FROM pg_roles
-        WHERE rolsuper AND
-              rolname = CURRENT_USER
+        WHERE rolname = CURRENT_USER
+        LIMIT 1
     eof
 
-    begin
-      ActiveRecord::Base.connection.execute(query).cmd_tuples > 0
-    rescue Exception => e
-      Rails.logger.error e.message
-      Rails.logger.error e.backtrace
-
-      false
-    end
+    ActiveRecord::Base.connection.execute(query).first['rolsuper'] == 't'
   end
 end
