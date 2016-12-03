@@ -163,9 +163,10 @@ module BulkImporter
     sql << "(#{columns.values.join(',')})"
     sql << "SELECT #{self.keys_to_list(columns.keys, 'o', types)}"
     sql << "FROM #{origin} o"
-    sql << "WHERE (#{self.keys_to_list(keys.keys, 'o')}) NOT IN"
-    sql << "( SELECT (#{self.keys_to_list(keys.values, 'd')})"
-    sql << "FROM #{destination} d )"
+    sql << "LEFT JOIN #{destination} d"
+    sql << "ON (#{self.keys_to_list(keys.keys, 'o')}) = "
+    sql << "(#{self.keys_to_list(keys.values, 'd')})"
+    sql << "WHERE (#{self.keys_to_list(keys.values, 'd')}) is null"
 
     [ sql.join(' ') ]
   end
