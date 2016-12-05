@@ -1,4 +1,4 @@
-# BulkImporter [![Build Status](https://travis-ci.org/abelosorio/bulk_importer.svg?branch=master)](https://travis-ci.org/abelosorio/bulk_importer)
+# BulkImporter [![Build Status](https://travis-ci.org/abelosorio/bulk_importer.svg?branch=master)](https://travis-ci.org/abelosorio/bulk_importer) [![Gem Version](https://badge.fury.io/rb/bulk_importer.svg)](https://badge.fury.io/rb/bulk_importer)
 
 
 This gem allows you to import a big amount of data from files to your database as quick as possible.
