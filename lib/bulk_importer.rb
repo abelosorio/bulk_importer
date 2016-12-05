@@ -71,7 +71,7 @@ module BulkImporter
       return -1
     ensure
       # Drop temporary table (if exists)
-      #ActiveRecord::Base.connection.execute "DROP TABLE IF EXISTS #{temp_name}"
+      ActiveRecord::Base.connection.execute "DROP TABLE IF EXISTS #{temp_name}"
     end
   end
 
@@ -171,7 +171,7 @@ module BulkImporter
     sql << "SELECT #{self.keys_to_list(columns.keys, 'o', types)}"
     sql << "FROM #{origin} o"
     sql << "LEFT JOIN #{destination} d"
-    sql << "ON (#{self.keys_to_list(keys.keys, 'o')}) = "
+    sql << "ON (#{self.keys_to_list(keys.keys, 'o', types)}) = "
     sql << "(#{self.keys_to_list(keys.values, 'd')})"
     sql << "WHERE (#{self.keys_to_list(keys.values, 'd')}) is null"
 
@@ -200,15 +200,25 @@ module BulkImporter
     pg_types = PostgresqlModule.get_column_types destination
     columns.values.each { |i| types[columns.invert[i]] = pg_types[i] }
 
+    o_columns_without_keys = columns.keys.delete_if { |i| keys.has_key? i }
+    d_columns_without_keys = columns.values.delete_if { |i| keys.has_value? i }
+
+    sql << "WITH #{origin}_prexistent_modified AS ("
+    sql << "SELECT o.* FROM #{origin} o JOIN #{destination} d"
+    sql << "ON (#{self.keys_to_list(keys.keys, 'o', types)}) = "
+    sql << "(#{self.keys_to_list(keys.values, 'd')}) AND "
+    sql << "(#{self.keys_to_list(o_columns_without_keys, 'o', types)}) != "
+    sql << "(#{self.keys_to_list(d_columns_without_keys, 'd')})"
+    sql << ")"
     sql << "UPDATE #{destination} d SET"
     set = []
     columns.delete_if { |item| columns[item].nil? }.keys.each do |column|
       set << "#{columns[column]} = o.#{column}::#{types[column]}"
     end
     sql << set.join(',')
-    sql << "FROM #{origin} o"
-    sql << "WHERE (#{self.keys_to_list(keys.keys, 'o')})"
-    sql << "IN (#{self.keys_to_list(keys.values, 'd')})"
+    sql << "FROM #{origin}_prexistent_modified o"
+    sql << "WHERE (#{self.keys_to_list(keys.keys, 'o', types)}) = "
+    sql << "(#{self.keys_to_list(keys.values, 'd')})"
 
     q << sql.join(' ')
 
@@ -250,8 +260,7 @@ module BulkImporter
   #
   def self.make_create_temp_table_sql(name, columns)
     columns = columns.map { |i| i + ' text' }
-    #"CREATE TEMPORARY TABLE #{name} (#{columns.join(',')})"
-    "CREATE TABLE #{name} (#{columns.join(',')})"
+    "CREATE TEMPORARY TABLE #{name} (#{columns.join(',')})"
   end
 
   # Translate an array of keys in a list with an optional prefix.
