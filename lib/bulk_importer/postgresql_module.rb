@@ -224,4 +224,13 @@ module PostgresqlModule
 
     ActiveRecord::Base.connection.execute(query).first['rolsuper'] == 't'
   end
+
+  # Create index on table (column(s)).
+  #
+  # * +table+
+  # * +columns+
+  #
+  def self.create_index_on(table, columns)
+    ActiveRecord::Base.connection.add_index table, columns
+  end
 end

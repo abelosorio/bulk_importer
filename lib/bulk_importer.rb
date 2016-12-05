@@ -8,6 +8,9 @@ module BulkImporter
   UPDATE_MODE_UPDATE  = 'update'
   UPDATE_MODE_REPLACE = 'replace'
 
+  # Module name (used for loggin).
+  NAME = 'BulkImporter'
+
   # Import data from a CSV file to an existing table
   #
   # ==== Parameters
@@ -43,12 +46,12 @@ module BulkImporter
     begin
       # Create temporary table (with all CSV fields)
       Rails.logger.debug \
-        "[#{self.class}] Creating temporary table #{temp_name}(#{columns.keys})"
+        "[#{NAME}] Creating temporary table #{temp_name}(#{columns.keys})"
       conn.execute self.make_create_temp_table_sql(temp_name, columns.keys)
 
       # Import data
       Rails.logger.debug \
-        "[#{self.class}] Importing data from #{file} to #{temp_name}"
+        "[#{NAME}] Importing data from #{file} to #{temp_name}"
       PostgresqlModule.copy_from(
         file,
         temp_name,
@@ -60,7 +63,7 @@ module BulkImporter
 
       # Move data from temporary table to target and return total imported rows
       Rails.logger.debug \
-        "[#{self.class}] Moving new data to #{target} with mode #{update_mode}"
+        "[#{NAME}] Moving new data to #{target} with mode #{update_mode}"
       self.move_imported_data(temp_name, target, columns, keys, update_mode)
     rescue Exception => e
       Rails.logger.error e.message
@@ -68,7 +71,7 @@ module BulkImporter
       return -1
     ensure
       # Drop temporary table (if exists)
-      ActiveRecord::Base.connection.execute "DROP TABLE IF EXISTS #{temp_name}"
+      #ActiveRecord::Base.connection.execute "DROP TABLE IF EXISTS #{temp_name}"
     end
   end
 
@@ -88,8 +91,12 @@ module BulkImporter
   #
   def self.move_imported_data(origin, destination, columns, keys, update_mode)
     unless self.is_update_mode_valid update_mode
-      raise "[#{self.class}] Unknown update mode: #{update_mode}"
+      raise "[#{NAME}] Unknown update mode: #{update_mode}"
     end
+
+    # Create an index to improve move performance.
+    Rails.logger.debug "[#{NAME}] Creating index on #{origin}"
+    PostgresqlModule.create_index_on origin, keys.keys.map { |i| i.downcase }
 
     queries = self.make_move_imported_data_sql(
       origin,
@@ -102,7 +109,7 @@ module BulkImporter
     rows = 0
 
     queries.each do |query|
-      Rails.logger.debug "[#{self.class}] Running query <<#{query}>>"
+      Rails.logger.debug "[#{NAME}] Running query <<#{query}>>"
       rows += ActiveRecord::Base.connection.execute(query).cmd_tuples
     end
 
@@ -243,7 +250,8 @@ module BulkImporter
   #
   def self.make_create_temp_table_sql(name, columns)
     columns = columns.map { |i| i + ' text' }
-    "CREATE TEMPORARY TABLE #{name} (#{columns.join(',')})"
+    #"CREATE TEMPORARY TABLE #{name} (#{columns.join(',')})"
+    "CREATE TABLE #{name} (#{columns.join(',')})"
   end
 
   # Translate an array of keys in a list with an optional prefix.
