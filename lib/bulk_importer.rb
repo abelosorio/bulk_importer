@@ -203,22 +203,36 @@ module BulkImporter
     o_columns_without_keys = columns.keys.delete_if { |i| keys.has_key? i }
     d_columns_without_keys = columns.values.delete_if { |i| keys.has_value? i }
 
-    sql << "WITH #{origin}_prexistent_modified AS ("
-    sql << "SELECT o.* FROM #{origin} o JOIN #{destination} d"
-    sql << "ON (#{self.keys_to_list(keys.keys, 'o', types)}) = "
-    sql << "(#{self.keys_to_list(keys.values, 'd')}) AND "
-    sql << "(#{self.keys_to_list(o_columns_without_keys, 'o', types)}) != "
-    sql << "(#{self.keys_to_list(d_columns_without_keys, 'd')})"
-    sql << ")"
-    sql << "UPDATE #{destination} d SET"
     set = []
     columns.delete_if { |item| columns[item].nil? }.keys.each do |column|
       set << "#{columns[column]} = o.#{column}::#{types[column]}"
     end
-    sql << set.join(',')
-    sql << "FROM #{origin}_prexistent_modified o"
-    sql << "WHERE (#{self.keys_to_list(keys.keys, 'o', types)}) = "
-    sql << "(#{self.keys_to_list(keys.values, 'd')})"
+    sets = set.join(',')
+
+    if columns.has_value? 'updated_at'
+      # Field is updated if origin's updated_at is greater than destination.
+
+      PostgresqlModule.create_index_on origin, columns.invert['updated_at'].downcase
+
+      sql << "UPDATE #{destination} d SET #{sets}"
+      sql << "FROM #{origin} o"
+      sql << "WHERE (#{self.keys_to_list(keys.keys, 'o', types)}) = "
+      sql << "(#{self.keys_to_list(keys.values, 'd')}) AND"
+      sql << "o.#{columns.invert['updated_at'].downcase}::timestamp > d.updated_at"
+    else
+      # Check if any field changed
+      sql << "WITH #{origin}_prexistent_modified AS ("
+      sql << "SELECT o.* FROM #{origin} o JOIN #{destination} d"
+      sql << "ON (#{self.keys_to_list(keys.keys, 'o', types)}) = "
+      sql << "(#{self.keys_to_list(keys.values, 'd')}) AND "
+      sql << "(#{self.keys_to_list(o_columns_without_keys, 'o', types)}) != "
+      sql << "(#{self.keys_to_list(d_columns_without_keys, 'd')})"
+      sql << ")"
+      sql << "UPDATE #{destination} d SET #{sets}"
+      sql << "FROM #{origin}_prexistent_modified o"
+      sql << "WHERE (#{self.keys_to_list(keys.keys, 'o', types)}) = "
+      sql << "(#{self.keys_to_list(keys.values, 'd')})"
+    end
 
     q << sql.join(' ')
 
